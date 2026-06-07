@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, WebSocket, status
+from fastapi.responses import HTMLResponse
 
 from pysip_notifier.config import Settings
+from pysip_notifier.log_stream import log_broadcaster
 from pysip_notifier.models import (
     HealthResponse,
     Job,
@@ -32,6 +34,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        log_broadcaster.install(settings.log_level)
         await service.start()
         yield
         await service.stop()
@@ -43,6 +46,79 @@ def create_app(
     )
     app.state.settings = settings
     app.state.service = service
+
+    @app.get("/", response_class=HTMLResponse)
+    async def logs_page() -> str:
+        return """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PySIP Notifier Logs</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      background: #0b1020;
+      color: #d6e2ff;
+      font: 14px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      padding: 12px 16px;
+      background: #111936;
+      border-bottom: 1px solid #26345f;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    main { padding: 12px 16px; white-space: pre-wrap; }
+    .muted { color: #91a1c7; }
+    .ok { color: #91f7b2; }
+    .bad { color: #ff9d9d; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>PySIP Notifier Logs</strong>
+    <span id="state" class="muted">connecting...</span>
+  </header>
+  <main id="logs"></main>
+  <script>
+    const logs = document.getElementById("logs");
+    const state = document.getElementById("state");
+    const protocol = location.protocol === "https:" ? "wss" : "ws";
+    const socket = new WebSocket(`${protocol}://${location.host}/ws/logs`);
+
+    function append(line) {
+      logs.textContent += line + "\\n";
+      window.scrollTo(0, document.body.scrollHeight);
+    }
+
+    socket.onopen = () => {
+      state.textContent = "connected";
+      state.className = "ok";
+      setInterval(() => {
+        if (socket.readyState === WebSocket.OPEN) socket.send("ping");
+      }, 30000);
+    };
+    socket.onmessage = event => append(event.data);
+    socket.onclose = () => {
+      state.textContent = "disconnected";
+      state.className = "bad";
+    };
+    socket.onerror = () => {
+      state.textContent = "error";
+      state.className = "bad";
+    };
+  </script>
+</body>
+</html>"""
+
+    @app.websocket("/ws/logs")
+    async def logs_socket(websocket: WebSocket) -> None:
+        await log_broadcaster.connect(websocket)
 
     @app.get("/health", response_model=HealthResponse)
     async def health(request: Request) -> HealthResponse:
@@ -65,6 +141,12 @@ def create_app(
         except RuntimeError as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
         return JobAccepted(id=job.id, status=job.status)
+
+    app.post(
+        "/api/v1/traccar",
+        response_model=JobAccepted,
+        status_code=status.HTTP_202_ACCEPTED,
+    )(submit)
 
     @app.get("/api/v1/jobs/{job_id}", response_model=Job)
     async def get_job(job_id: UUID, request: Request) -> Job:

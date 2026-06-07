@@ -1,0 +1,11 @@
+.env
+.venv/
+.git/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+PySIP.log
+*.egg-info/
+build/
+dist/
+uv.lock

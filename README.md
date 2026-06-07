@@ -57,11 +57,38 @@ HTTP client address and is not necessarily the notifier server address.
 Start the service:
 
 ```bash
-uv run .\pysip_notifier\main.py
+uv run pysip_notifier/main.py
 ```
 
 The default address is `http://127.0.0.1:8080`. Interactive API documentation
-is at `http://127.0.0.1:8080/docs`.
+is at `http://127.0.0.1:8080/docs`. The root page,
+`http://127.0.0.1:8080/`, shows a live log viewer backed by
+`ws://127.0.0.1:8080/ws/logs`.
+
+## Docker
+
+Build and run with Docker Compose:
+
+```bash
+docker compose up -d --build
+```
+
+The compose file uses `network_mode: host`, which is strongly recommended for
+SIP and RTP. The image includes `ffmpeg`, `ca-certificates`, and the Python
+runtime dependencies. Set `API_HOST=0.0.0.0` in Docker so the HTTP API and log
+viewer are reachable from outside the container.
+
+Follow logs with Docker:
+
+```bash
+docker logs -f pysip-notifier
+```
+
+Or open the browser log viewer:
+
+```text
+http://SERVER_IP:8080/
+```
 
 ## API
 

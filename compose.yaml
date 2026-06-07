@@ -1,0 +1,11 @@
+services:
+  pysip-notifier:
+    build: .
+    container_name: pysip-notifier
+    env_file:
+      - .env
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 8080
+    network_mode: host
+    restart: unless-stopped
