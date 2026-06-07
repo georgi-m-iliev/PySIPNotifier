@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pysip-notifier"
+version = "0.1.0"
+description = "Local HTTP-to-SIP phone call notification service"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "PySIPio==1.8.0",
+    "audioop-lts>=0.2.1; python_version >= '3.13'",
+    "edge-tts==7.2.8",
+    "fastapi>=0.115,<1",
+    "miniaudio>=1.61,<2",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.1",
+    "scipy>=1.14,<2",
+    "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+test = [
+    "httpx>=0.28,<1",
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.25,<1",
+]
+
+[project.scripts]
+pysip-notifier = "pysip_notifier.main:run"
+
+[tool.setuptools.packages.find]
+include = ["pysip_notifier*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
