@@ -40,6 +40,20 @@ INVITEs when the `From` user differs from the account username.
 edge-tts audio is converted in-process to an 8 kHz mono WAV before playback,
 so a separate `ffmpeg` installation is not required.
 
+On Docker, NAT, VPN, or multi-interface Linux hosts, set:
+
+```dotenv
+SIP_ADVERTISED_IP=192.168.1.50
+SIP_MEDIA_IP=192.168.1.50
+```
+
+Use the host address that the PBX can route to. If the app runs in Docker
+bridge mode, prefer host networking for SIP/RTP or advertise the Docker host's
+reachable address and publish the required UDP RTP range.
+
+The address shown before a Uvicorn request, such as `10.1.0.6:62705`, is the
+HTTP client address and is not necessarily the notifier server address.
+
 Start the service:
 
 ```bash

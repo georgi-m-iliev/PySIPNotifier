@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import ipaddress
 import logging
 import re
 import secrets
@@ -50,7 +51,7 @@ class PySipCaller:
 
         # Asterisk authenticates the From identity for this endpoint. Using a
         # separate caller ID here causes repeated 401 responses.
-        return self._call_factory(
+        call = self._call_factory(
             self.settings.sip_username,
             self.settings.sip_password,
             self.settings.sip_server,
@@ -58,6 +59,20 @@ class PySipCaller:
             connection_type=self.settings.sip_connection_type,
             caller_id=self.settings.sip_username,
         )
+        self._configure_network_addresses(call)
+        return call
+
+    def _configure_network_addresses(self, call: Any) -> None:
+        sip_core = getattr(call, "sip_core", None)
+        if sip_core is None:
+            return
+
+        if self.settings.sip_advertised_ip:
+            advertised_ip = self.settings.sip_advertised_ip
+            sip_core.get_public_ip = lambda: advertised_ip
+        if self.settings.sip_media_ip:
+            media_ip = self.settings.sip_media_ip
+            sip_core.get_local_ip = lambda: media_ip
 
     async def call_and_play(
         self,
@@ -73,12 +88,36 @@ class PySipCaller:
         answered = asyncio.Event()
         finished = asyncio.Event()
         finish_reason = "Call ended before answer"
+        responses_received = 0
+
+        async def log_sip_response(message: Any) -> None:
+            nonlocal responses_received
+            status = getattr(getattr(message, "status", None), "code", None)
+            if status is None or getattr(message, "method", None) != "INVITE":
+                return
+            responses_received += 1
+            logger.info("SIP INVITE response from server: %s", status)
+
+        sip_core = getattr(call, "sip_core", None)
+        if sip_core is not None:
+            sip_core.on_message_callbacks.insert(0, log_sip_response)
 
         @call.on_call_state_changed
         async def state_changed(state: Any) -> None:
             nonlocal finish_reason
             state_value = getattr(state, "value", str(state))
-            if state_value == "ANSWERED":
+            if state_value == "DIALING":
+                logger.info(
+                    "SIP call network: server=%s transport=%s signaling=%s (%s) "
+                    "media=%s (%s)",
+                    self.settings.sip_server,
+                    self.settings.sip_connection_type,
+                    getattr(call, "my_public_ip", None),
+                    _address_family(getattr(call, "my_public_ip", None)),
+                    getattr(call, "my_private_ip", None),
+                    _address_family(getattr(call, "my_private_ip", None)),
+                )
+            elif state_value == "ANSWERED":
                 answered.set()
             elif state_value in {"BUSY", "ENDED", "FAILED"}:
                 finish_reason = f"Call entered {state_value} state"
@@ -104,8 +143,16 @@ class PySipCaller:
                 raise RuntimeError(finish_reason)
             if answer_task not in done or not answered.is_set():
                 if not done:
+                    details = ""
+                    if responses_received == 0:
+                        details = (
+                            "; no SIP response was received. Check routing/firewall "
+                            "to SIP_SERVER and configure SIP_ADVERTISED_IP/"
+                            "SIP_MEDIA_IP on multi-interface or container hosts"
+                        )
                     raise TimeoutError(
                         f"Call was not answered within {timeout_seconds} seconds"
+                        f"{details}"
                     )
                 raise RuntimeError(finish_reason)
 
@@ -202,8 +249,8 @@ class PySipCaller:
                 self.password,
                 method,
                 uri,
-                parameters,
-            )
+            parameters,
+        )
 
         def ack_generator(self: Any, transaction: Any) -> str:
             response = getattr(self, "_pysip_notifier_dialog_response", None)
@@ -341,3 +388,12 @@ def _build_digest_authorization(
             [f"qop={qop}", f"nc={nonce_count}", f'cnonce="{cnonce}"']
         )
     return "Authorization: Digest " + ", ".join(fields) + "\r\n"
+
+
+def _address_family(address: str | None) -> str:
+    if not address:
+        return "unknown"
+    try:
+        return f"IPv{ipaddress.ip_address(address).version}"
+    except ValueError:
+        return "invalid"

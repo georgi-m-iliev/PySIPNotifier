@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     sip_connection_type: str = "UDP"
     sip_caller_id: str | None = None
     sip_destination: str | None = None
+    sip_advertised_ip: str | None = None
+    sip_media_ip: str | None = None
 
     tts_voice: str = "en-US-AriaNeural"
     tts_rate: str = "+0%"

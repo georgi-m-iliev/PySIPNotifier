@@ -43,6 +43,23 @@ def test_direct_call_uses_sip_username_as_caller_identity() -> None:
     }
 
 
+def test_network_address_overrides_are_applied() -> None:
+    sip_core = SimpleNamespace(
+        get_public_ip=lambda: "198.51.100.10",
+        get_local_ip=lambda: "172.17.0.2",
+    )
+    call = SimpleNamespace(sip_core=sip_core)
+    settings = make_settings(
+        sip_advertised_ip="10.1.0.6",
+        sip_media_ip="10.1.0.6",
+    )
+
+    PySipCaller(settings)._configure_network_addresses(call)
+
+    assert sip_core.get_public_ip() == "10.1.0.6"
+    assert sip_core.get_local_ip() == "10.1.0.6"
+
+
 def test_playback_timeout_scales_with_audio_duration() -> None:
     short_stream = SimpleNamespace(audio_length=4)
     long_stream = SimpleNamespace(audio_length=75)

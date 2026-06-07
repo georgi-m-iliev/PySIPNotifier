@@ -48,6 +48,8 @@ def make_settings(**overrides) -> Settings:
         "sip_connection_type": "UDP",
         "sip_caller_id": None,
         "sip_destination": "100",
+        "sip_advertised_ip": None,
+        "sip_media_ip": None,
         "tts_voice": "en-US-AriaNeural",
         "tts_rate": "+0%",
         "tts_volume": "+0%",
@@ -107,4 +109,3 @@ def test_missing_sip_configuration_returns_service_unavailable() -> None:
         response = client.post("/api/v1/notify", json={"message": "Hello"})
 
     assert response.status_code == 503
-
